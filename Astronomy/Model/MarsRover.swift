@@ -9,7 +9,7 @@
 import Foundation
 
 struct MarsRover: Codable {
-    let name: String
+    let name: String 
     
     let launchDate: Date
     let landingDate: Date
