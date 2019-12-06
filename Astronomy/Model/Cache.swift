@@ -17,7 +17,7 @@ class Cache<Key: Hashable , Value> {
     private var queue = DispatchQueue(label: "com.LambdaSchool.Astronomy.ConcurrentOperationStateQueue")
     
     // have a function to add items to the cache
-    func cache(value: Value, key: Key) {
+    func cache(key: Key, value: Value) {
         queue.async {
             self.cache[key] = value
         }

@@ -8,7 +8,44 @@
 
 import UIKit
 
+// Serial Queue happens on the main thread
+// DispatchQueue is a serial queue
+// OperationQueue is a background queue
+
 class PhotosCollectionViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+    
+    // MARK: - Properties
+    
+    private let client = MarsRoverClient()
+    private let cache = Cache<Int, Data>()
+    private var photoFetchQueue = OperationQueue()
+    private var operations = [Int: Operation]()
+    private var roverInfo: MarsRover? {
+        didSet {
+            solDescription = roverInfo?.solDescriptions[3]
+        }
+    }
+    private var solDescription: SolDescription? {
+        didSet {
+            if let rover = roverInfo,
+                let sol = solDescription?.sol {
+                client.fetchPhotos(from: rover, onSol: sol) { (photoRefs, error) in
+                    if let e = error { NSLog("Error fetching photos for \(rover.name) on sol \(sol): \(e)"); return }
+                    self.photoReferences = photoRefs ?? []
+                }
+            }
+        }
+    }
+    private var photoReferences = [MarsPhotoReference]() {
+        didSet {
+            DispatchQueue.main.async { self.collectionView?.reloadData() }
+        }
+    }
+    
+    @IBOutlet var collectionView: UICollectionView!
+    
+    
+    
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,7 +61,7 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
     }
     
     // MARK: - UICollectionView Data Source
-
+    
     // UICollectionViewDataSource/Delegate
     
     func numberOfSections(in collectionView: UICollectionView) -> Int {
@@ -62,68 +99,84 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
         return UIEdgeInsets(top: 0, left: 10.0, bottom: 0, right: 10.0)
     }
     
-    // MARK: - Private - Part 1 - Implement Basic Collection View
-
+    // MARK: - Private
     
     private func loadImage(forCell cell: ImageCollectionViewCell, forItemAt indexPath: IndexPath) {
         
-        //Get the MarsPhotoReference instance for the passed in indexPath from the photoReferences array property.
+        // Get the MarsPhotoReference instance for the passed in indexPath from the photoReferences array property.
         let photoReference = photoReferences[indexPath.item]
         
-        //Get the URL for the associated image using the imageURL property. Use .usingHTTPS (provided in URL+Secure.swift) to make sure the URL is an https URL. By default, the API returns http URLs.
-        guard let imageURL = photoReference.imageURL.usingHTTPS else { return }
-        
-        
-        // TODO: Implement image loading here
-        let dataTask = URLSession.shared.dataTask(with: imageURL) { (data, _, error) in
-            if let error = error {
-                print("Error fetching image data: \(error)")
-                return
-            }
-            
-            guard let data = data else {
-                print("Error receiving data")
-                return
-            }
-            
-            let image = UIImage(data: data)
-            DispatchQueue.main.async {
-                if self.collectionView.indexPath(for: cell) == indexPath {
+        // Check if there is cached data
+        if let cacheData = cache.value(key: photoReference.id),
+            let image = UIImage(data: cacheData) {
                 cell.imageView.image = image
-                }
+                return
+            }
+        
+        // Start our fetch operation:
+        let fetchOp = FetchPhotoOperation(photoReference: photoReference)
+        
+        let cacheOp = BlockOperation {
+            if let data  = fetchOp.imageData {
+                self.cache.cache(key: photoReference.id, value: data)
             }
         }
-        dataTask.resume()
-    }
-    
-    // MARK: - END OF PART 1
-
-    
-    // Properties
-    
-    private let client = MarsRoverClient()
-    
-    private var roverInfo: MarsRover? {
-        didSet {
-            solDescription = roverInfo?.solDescriptions[3]
-        }
-    }
-    private var solDescription: SolDescription? {
-        didSet {
-            if let rover = roverInfo,
-                let sol = solDescription?.sol {
-                client.fetchPhotos(from: rover, onSol: sol) { (photoRefs, error) in
-                    if let e = error { NSLog("Error fetching photos for \(rover.name) on sol \(sol): \(e)"); return }
-                    self.photoReferences = photoRefs ?? []
-                }
+        
+        let completionOp = BlockOperation {
+            defer { self.operations.removeValue(forKey: photoReference.id) }
+            if let currentIndexPath = self.collectionView.indexPath(for: cell),
+                currentIndexPath != indexPath {
+                print("Got image for reused cell")
+                return
             }
+            
+            if let data = fetchOp.imageData {
+                cell.imageView.image = UIImage(data: data)
+            }
+            
         }
-    }
-    private var photoReferences = [MarsPhotoReference]() {
-        didSet {
-            DispatchQueue.main.async { self.collectionView?.reloadData() }
-        }
+        
+        
+        cacheOp.addDependency(fetchOp)
+        completionOp.addDependency(fetchOp)
+        
+        photoFetchQueue.addOperation(fetchOp)
+        photoFetchQueue.addOperation(cacheOp)
+        OperationQueue.main.addOperation(completionOp)
+        // Background que has property called "main" which segues back into the main que
+        // All UI updates have to done on the main queue, so once this is done being run on the background queue, we must update it onto the main queue
+        
+        
+        
+        
+        
+        // PART 1:
+        //        //Get the URL for the associated image using the imageURL property. Use .usingHTTPS (provided in URL+Secure.swift) to make sure the URL is an https URL. By default, the API returns http URLs.
+        //        guard let imageURL = photoReference.imageURL.usingHTTPS else { return }
+        //
+        //
+        //        // TODO: Implement image loading here
+        //        let dataTask = URLSession.shared.dataTask(with: imageURL) { (data, _, error) in
+        //            if let error = error {
+        //                print("Error fetching image data: \(error)")
+        //                return
+        //            }
+        //
+        //            guard let data = data else {
+        //                print("Error receiving data")
+        //                return
+        //            }
+        //
+        //            let image = UIImage(data: data)
+        //            DispatchQueue.main.async {
+        //                if self.collectionView.indexPath(for: cell) == indexPath {
+        //                cell.imageView.image = image
+        //                }
+        //            }
+        //        }
+        //        dataTask.resume()
+        // MARK: - END OF PART 1
     }
     
-    @IBOutlet var collectionView: UICollectionView!
+    
 }
