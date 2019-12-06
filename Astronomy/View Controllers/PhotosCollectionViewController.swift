@@ -99,6 +99,12 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
         return UIEdgeInsets(top: 0, left: 10.0, bottom: 0, right: 10.0)
     }
     
+    // Implement Cancellation:
+    func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        let photoReference = photoReferences[indexPath.item]
+        operations[photoReference.id]?.cancel()
+    }
+    
     // MARK: - Private
     
     private func loadImage(forCell cell: ImageCollectionViewCell, forItemAt indexPath: IndexPath) {
@@ -147,7 +153,7 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
         // All UI updates have to done on the main queue, so once this is done being run on the background queue, we must update it onto the main queue
         
         
-        
+        operations[photoReference.id] = fetchOp
         
         
         // PART 1:
