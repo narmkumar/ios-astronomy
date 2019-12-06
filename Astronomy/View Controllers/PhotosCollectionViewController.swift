@@ -23,6 +23,8 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
         }
     }
     
+    // MARK: - UICollectionView Data Source
+
     // UICollectionViewDataSource/Delegate
     
     func numberOfSections(in collectionView: UICollectionView) -> Int {
@@ -73,7 +75,7 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
         
         
         // TODO: Implement image loading here
-        URLSession.shared.dataTask(with: imageURL) { (data, _, error) in
+        let dataTask = URLSession.shared.dataTask(with: imageURL) { (data, _, error) in
             if let error = error {
                 print("Error fetching image data: \(error)")
                 return
@@ -84,12 +86,14 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
                 return
             }
             
-            let imageData = UIImage(data: data)
-            
+            let image = UIImage(data: data)
             DispatchQueue.main.async {
-                cell.imageView.image = imageData
+                if self.collectionView.indexPath(for: cell) == indexPath {
+                cell.imageView.image = image
+                }
             }
-        }.resume()
+        }
+        dataTask.resume()
     }
     
     // MARK: - END OF PART 1
