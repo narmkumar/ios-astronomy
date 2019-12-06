@@ -60,14 +60,40 @@ class PhotosCollectionViewController: UIViewController, UICollectionViewDataSour
         return UIEdgeInsets(top: 0, left: 10.0, bottom: 0, right: 10.0)
     }
     
-    // MARK: - Private
+    // MARK: - Private - Part 1 - Implement Basic Collection View
+
     
     private func loadImage(forCell cell: ImageCollectionViewCell, forItemAt indexPath: IndexPath) {
         
-        // let photoReference = photoReferences[indexPath.item]
+        //Get the MarsPhotoReference instance for the passed in indexPath from the photoReferences array property.
+        let photoReference = photoReferences[indexPath.item]
+        
+        //Get the URL for the associated image using the imageURL property. Use .usingHTTPS (provided in URL+Secure.swift) to make sure the URL is an https URL. By default, the API returns http URLs.
+        guard let imageURL = photoReference.imageURL.usingHTTPS else { return }
+        
         
         // TODO: Implement image loading here
+        URLSession.shared.dataTask(with: imageURL) { (data, _, error) in
+            if let error = error {
+                print("Error fetching image data: \(error)")
+                return
+            }
+            
+            guard let data = data else {
+                print("Error receiving data")
+                return
+            }
+            
+            let imageData = UIImage(data: data)
+            
+            DispatchQueue.main.async {
+                cell.imageView.image = imageData
+            }
+        }.resume()
     }
+    
+    // MARK: - END OF PART 1
+
     
     // Properties
     
